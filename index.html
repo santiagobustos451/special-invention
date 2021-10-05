@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Juego Phaser</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;900&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@500&family=Open+Sans&display=swap');
+    </style>
+    <script src="//cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
+    <style type="text/css">
+      body {
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <script type="text/javascript">
+      var config = {
+        type: Phaser.AUTO,
+        width: 800,
+        height: 800,
+        physics: {
+          default: 'arcade',
+          arcade: {
+            gravity: { y: 1000 },
+            debug: false,
+          },
+        },
+        scene: {
+          preload: preload,
+          create: create,
+          update: update,
+        },
+      };
+
+      var player;
+      var platforms;
+      var hb_wind;
+      var cursors;
+      var jump;
+      var jumpsleft = 2;
+      var restart1;
+      var restart2;
+      var restart3;
+      var xSpeed = 0;
+      var i = 0;
+      var sfx_jump;
+      var sfx_hit;
+      var sfx_pickup;
+      var music;
+      var cuenta = 0;
+      var velocidadVentilador;
+
+      var game = new Phaser.Game(config);
+
+      function preload() {
+        this.load.image('sky', './assets/sky.png');
+        this.load.image('ground', './assets/platform.png');
+        this.load.image('star', './assets/star.png');
+        this.load.image('gem', './assets/gem.png');
+        this.load.image('bomb', './assets/bomb.png');
+        this.load.image('hb_wind', './assets/hb_wind.png');
+        this.load.spritesheet('dude', './assets/dude.png', {
+          frameWidth: 32,
+          frameHeight: 48,
+        });
+        this.load.spritesheet('wind', './assets/sp_wind.png', {
+          frameWidth: 300,
+          frameHeight: 800,
+        });
+
+        this.load.audio('sfx_jump', './assets/sfx/jump.wav');
+        this.load.audio('sfx_hit', './assets/sfx/hit.wav');
+        this.load.audio('sfx_pickup', './assets/sfx/pickup.wav');
+        this.load.audio('sfx_pickup2', './assets/sfx/pickup2.wav');
+        this.load.audio('bgm', './assets/sfx/bgm.wav');
+      }
+
+      function create() {
+        //Sonidos
+        //music = this.sound.add('bgm', {loop: true, volume:.15});
+        //music.play();
+
+        //  A simple background for our game
+        this.add.image(400, 400, 'sky');
+        wind = this.add.sprite(400, 400, 'wind');
+
+        zone = this.add.zone(400 - 150, 0).setSize(300, 800);
+        this.physics.world.enable(zone);
+        zone.body.setAllowGravity(false);
+        zone.body.moves = false;
+
+        outZone = this.add.zone(0, 0).setSize(250, 800);
+        this.physics.world.enable(outZone);
+        outZone.body.setAllowGravity(false);
+        outZone.body.moves = false;
+        outZone2 = this.add.zone(550, 0).setSize(250, 800);
+        this.physics.world.enable(outZone2);
+        outZone2.body.setAllowGravity(false);
+        outZone2.body.moves = false;
+
+        //  The platforms group contains the ground and the 2 ledges we can jump on
+        platforms = this.physics.add.staticGroup();
+
+        //  Here we create the ground.
+        //  Scale it to fit the width of the game (the original sprite is 400x32 in size)
+        platforms.create(400, 760, 'ground').setScale(2.5).refreshBody();
+
+        //  Now let's create some ledges
+        platforms.create(800, 400, 'ground');
+        platforms.create(0, 400, 'ground');
+
+        // The player and its settings
+        player = this.physics.add.sprite(100, 450, 'dude');
+
+        //  Player physics properties. Give the little guy a slight bounce.
+        player.setCollideWorldBounds(true);
+
+        this.anims.create({
+          key: 'wind',
+          frames: this.anims.generateFrameNumbers('wind', { start: 0, end: 3 }),
+          frameRate: 10,
+          repeat: -1,
+        });
+
+        wind.anims.play('wind');
+
+        //  Our player animations, turning, walking left and walking right.
+        this.anims.create({
+          key: 'left',
+          frames: this.anims.generateFrameNumbers('dude', { start: 0, end: 3 }),
+          frameRate: 10,
+          repeat: -1,
+        });
+
+        this.anims.create({
+          key: 'turn',
+          frames: [{ key: 'dude', frame: 4 }],
+          frameRate: 20,
+        });
+
+        this.anims.create({
+          key: 'right',
+          frames: this.anims.generateFrameNumbers('dude', { start: 5, end: 8 }),
+          frameRate: 10,
+          repeat: -1,
+        });
+
+        //  Input Events
+        cursors = this.input.keyboard.createCursorKeys();
+
+        //  Some stars to collect, 12 in total, evenly spaced 70 pixels apart along the x axis
+
+        //  The score
+        scoreText = this.add.text(
+          16,
+          16,
+          'lejosA: 0\nnormalA: 0\ncercaA\ncentrado: 0\ncercaB: 0\nnormalB: 0\nlejosB: 0',
+          {
+            font: '32px Raleway',
+          }
+        );
+        scoreText.setTint(0xfff682);
+
+        //  Collide the player and the stars with the platforms
+        this.physics.add.collider(player, platforms);
+
+        //  Checks to see if the player overlaps with any of the stars, if he does call the collectStar function
+        this.physics.add.overlap(player, zone, windFloat, null, this);
+        this.physics.add.overlap(player, outZone, endFloat, null, this);
+        this.physics.add.overlap(player, outZone2, endFloat, null, this);
+      }
+
+      function update() {
+        jump = Phaser.Input.Keyboard.JustDown(cursors.up);
+        restart2 = Phaser.Input.Keyboard.JustDown(cursors.left);
+        restart3 = Phaser.Input.Keyboard.JustDown(cursors.right);
+
+        if (cursors.left.isDown) {
+          if (xSpeed > -250 && xSpeed <= 0) {
+            xSpeed -= 20;
+          } else if (xSpeed > 0) {
+            xSpeed -= 50;
+          }
+
+          //player.setVelocityX(xSpeed);
+
+          player.anims.play('left', true);
+        } else if (cursors.right.isDown) {
+          if (xSpeed < 250 && xSpeed >= 0) {
+            xSpeed += 20;
+          } else if (xSpeed < 0) {
+            xSpeed += 50;
+          }
+          //player.setVelocityX(xSpeed);
+
+          player.anims.play('right', true);
+        } else {
+          if (xSpeed <= 260 && xSpeed > 20) {
+            xSpeed -= 30;
+          } else if (xSpeed >= -260 && xSpeed < -20) {
+            xSpeed += 30;
+          } else if (xSpeed >= -30 && xSpeed <= 30) {
+            xSpeed = 0;
+          }
+          //player.setVelocityX(xSpeed);
+          player.anims.play('turn');
+        }
+        player.setVelocityX(xSpeed);
+        //console.log(xSpeed);
+
+        if (jump && jumpsleft != 0) {
+          player.setVelocityY(-430);
+          this.sound.play('sfx_jump');
+          --jumpsleft;
+        }
+        if (player.body.touching.down) {
+          jumpsleft = 1;
+        }
+      }
+
+      function windFloat() {
+        //jumpsleft = 0;
+        if (player.y < 20) {
+          lejosA = 1;
+        } else if (20 < player.y && player.y <= 50) {
+          lejosA = (50 - player.y) / (50 - 20);
+        } else if (50 < player.y) {
+          lejosA = 0;
+        }
+        normalA = trapecio(player.y, 30, 50, 150, 170);
+        cercaA = trapecio(player.y, 150, 190, 270, 345);
+        centrado = triangulo(player.y, 340, 350, 360);
+        cercaB = trapecio(player.y, 355, 430, 490, 530);
+        normalB = trapecio(player.y, 510, 530, 630, 650);
+        if (player.y < 630) {
+          lejosB = 0;
+        } else if (630 < player.y && player.y <= 670) {
+          lejosB = (player.y - 360) / (670 - 360);
+        } else if (670 < player.y) {
+          lejosB = 1;
+        }
+        suma_ponderada =
+          (lejosA +
+            0.7 * normalA +
+            0.5 * cercaA -
+            0.5 * cercaB -
+            0.7 * normalB -
+            lejosB) /
+          4.4;
+        player.body.setAllowGravity(false);
+
+        player.setVelocityY(
+          1000 * suma_ponderada + (Math.random() - 0.5) * 100
+        );
+        if (centrado != 0) {
+          player.setVelocityY((Math.random() - 0.5) * 100);
+        }
+
+        scoreText.setText(
+          'lejosA: ' +
+            lejosA +
+            '\nnormalA: ' +
+            normalA +
+            '\ncercaA: ' +
+            cercaA +
+            '\ncentrado: ' +
+            centrado +
+            '\ncercaB: ' +
+            cercaB +
+            '\nnormalB: ' +
+            normalB +
+            '\nlejosB: ' +
+            lejosB
+        );
+      }
+
+      function trapecio(valor, a, b, c, d) {
+        if (valor <= a) {
+          return 0;
+        } else if (a < valor && valor <= b) {
+          return (valor - a) / (b - a);
+        } else if (b < valor && valor <= c) {
+          return 1;
+        } else if (c < valor && valor <= d) {
+          return (d - valor) / (d - c);
+        } else if (d < valor) {
+          return 0;
+        }
+      }
+      function triangulo(valor, a, b, c) {
+        if (valor <= a) {
+          return 0;
+        } else if (a < valor && valor < b) {
+          return (valor - a) / (b - a);
+        } else if (valor == b) {
+          return 1;
+        } else if (b < valor && valor <= c) {
+          return (c - valor) / (c - b);
+        } else if (c < valor) {
+          return 0;
+        }
+      }
+      function endFloat() {
+        player.body.setAllowGravity(true);
+        player.setGravityY(0);
+      }
+    </script>
+  </body>
+</html>
